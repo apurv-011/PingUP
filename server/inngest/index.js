@@ -64,61 +64,122 @@ export const syncUserDeletion = inngest.createFunction(
 );
 
 // Inngest function to send remainder when a new connection request is added
-const sendNewConnectionRequestRemainder = inngest.createFunction(
+const sendNewConnectionRequestReminder = inngest.createFunction(
   {
-    id: "send-new-connection-request-remainder",
+    id: "send-new-connection-request-reminder",
     triggers: [{ event: "clerk/connection-request.added" }],
   },
   async ({ event, step }) => {
     const { connectionId } = event.data;
 
+    // Send initial email
     await step.run("send-connection-request-email", async () => {
       const connection = await Connection.findById(connectionId).populate(
         "from_user_id to_user_id",
       );
 
-      const subject = `👋 New Connection Request`;
-      const body = `
-      <div style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2>Hi ${connection.to_user_id.full_name},</h2>
-        <p>You have a new connection request from ${connection.from_user_id.full_name} - @${connection.from_user_id.username}</p>
-        <p>Click <a href="${process.env.FRONTEND_URL}/connections" style="color: #10b981;">here</a> to accept or reject the request</p>
-        <br/>
-        <p>Thanks,<br/>PingUp - Stay Connected</p>
-    </div>`;
-
-      await sendEmail(connection.to_user_id.email, subject, body);
-    });
-
-    const in24Hours = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    await step.sleepUntil("Wait for 24 hours", in24Hours);
-
-    await step.run("send-connection-request-remainder-email", async () => {
-      const connection = await Connection.findById(connectionId).populate(
-        "from_user_id to_user_id",
-      );
-
+      // Safety checks
       if (!connection) {
         return { message: "Connection not found" };
       }
 
+      if (!connection.from_user_id || !connection.to_user_id) {
+        return { message: "User data missing" };
+      }
+
+      const subject = `👋 New Connection Request`;
+
+      const body = `
+      <div style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2>Hi ${connection.to_user_id.full_name},</h2>
+
+        <p>
+          You have a new connection request from
+          ${connection.from_user_id.full_name}
+          - @${connection.from_user_id.username}
+        </p>
+
+        <p>
+          Click
+          <a href="${process.env.FRONTEND_URL}/connections"
+             style="color: #10b981;">
+             here
+          </a>
+          to accept or reject the request.
+        </p>
+
+        <br/>
+
+        <p>Thanks,<br/>PingUp - Stay Connected</p>
+      </div>
+      `;
+
+      await sendEmail(
+        connection.to_user_id.email,
+        subject,
+        body,
+      );
+
+      return { message: "Initial email sent successfully" };
+    });
+
+    // Wait for 24 hours
+    await step.sleep("wait-for-24-hours", "24h");
+
+    // Send reminder email
+    await step.run("send-connection-request-reminder-email", async () => {
+      const connection = await Connection.findById(connectionId).populate(
+        "from_user_id to_user_id",
+      );
+
+      // Safety checks
+      if (!connection) {
+        return { message: "Connection not found" };
+      }
+
+      if (!connection.from_user_id || !connection.to_user_id) {
+        return { message: "User data missing" };
+      }
+
+      // Stop if already accepted
       if (connection.status === "accepted") {
         return { message: "Connection request already accepted" };
       }
 
-      const subject = `👋 New Connection Request`;
+      const subject = `⏰ Reminder: Connection Request Pending`;
+
       const body = `
       <div style="font-family: Arial, sans-serif; padding: 20px;">
         <h2>Hi ${connection.to_user_id.full_name},</h2>
-        <p>You have a new connection request from ${connection.from_user_id.full_name} - @${connection.from_user_id.username}</p>
-        <p>Click <a href="${process.env.FRONTEND_URL}/connections" style="color: #10b981;">here</a> to accept or reject the request</p>
-        <br/>
-        <p>Thanks,<br/>PingUp - Stay Connected</p>
-    </div>`;
 
-      await sendEmail(connection.to_user_id.email, subject, body);
-      return { message: "Remainder email sent successfully" };
+        <p>
+          You still have a pending connection request from
+          ${connection.from_user_id.full_name}
+          - @${connection.from_user_id.username}
+        </p>
+
+        <p>
+          Click
+          <a href="${process.env.FRONTEND_URL}/connections"
+             style="color: #10b981;">
+             here
+          </a>
+          to respond.
+        </p>
+
+        <br/>
+
+        <p>Thanks,<br/>PingUp - Stay Connected</p>
+      </div>
+      `;
+
+      await sendEmail(
+        connection.to_user_id.email,
+        subject,
+        body,
+      );
+
+      return { message: "Reminder email sent successfully" };
     });
   },
 );
