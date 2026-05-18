@@ -87,11 +87,7 @@ const sendNewConnectionRequestRemainder = inngest.createFunction(
         <p>Thanks,<br/>PingUp - Stay Connected</p>
     </div>`;
 
-      await sendEmail({
-        to: connection.to_user_id.email,
-        subject,
-        body,
-      });
+      await sendEmail(connection.to_user_id.email, subject, body);
     });
 
     const in24Hours = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -117,16 +113,16 @@ const sendNewConnectionRequestRemainder = inngest.createFunction(
         <p>Thanks,<br/>PingUp - Stay Connected</p>
     </div>`;
 
-      await sendEmail({
-        to: connection.to_user_id.email,
-        subject,
-        body,
-      });
+      await sendEmail(connection.to_user_id.email, subject, body);
       return { message: "Remainder email sent successfully" };
     });
-
   },
 );
 
 // Create an empty array where we'll export future Inngest functions
-export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation, sendNewConnectionRequestRemainder];
+export const functions = [
+  syncUserCreation,
+  syncUserDeletion,
+  syncUserUpdation,
+  sendNewConnectionRequestRemainder,
+];
