@@ -22,7 +22,7 @@ const App = () => {
     if(user) {
       getToken().then((token)=>console.log(token))
     }
-  }, [getToken, user])
+  }, [user])
   
 
   return (
