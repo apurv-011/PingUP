@@ -8,7 +8,7 @@ const MenuItems = ({setSideBarOpen}) => {
         {
             menuItemsData.map(({to, label, Icon})=>(
                 <NavLink key={to} to={to} end={to === '/'} onClick={()=>setSideBarOpen(false)} className={({isActive})=>`px-3.5 py-1.5 flex items-center gap-2 rounded-xl ${isActive ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'}`}>
-                    <Icon className="w-4 h-4" />
+                    {React.createElement(Icon, { className: 'w-4 h-4' })}
                     {label}
                 </NavLink>
             ))

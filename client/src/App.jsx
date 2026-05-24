@@ -48,7 +48,6 @@ const App = () => {
 
   useEffect(() => {
     if (currentUser) {
-      
       const eventSource = new EventSource(
         import.meta.env.VITE_BASEURL + '/api/message/' + currentUser._id
       )
@@ -68,7 +67,7 @@ const App = () => {
         eventSource.close()
       }
     }
-  }, [user, dispatch])
+  }, [currentUser, dispatch])
 
 
 

@@ -8,11 +8,19 @@ import { useSelector } from 'react-redux'
 const Sidebar = ({ sideBarOpen, setSideBarOpen }) => {
 
     const navigate = useNavigate()
-    const user = useSelector((state)=>state.user.value)
+    const user = useSelector((state) => state.user.value)
     const { signOut } = useClerk()
 
     return (
-        <div className={`w-52 xl:w-56 bg-white border-r border-gray-200 flex flex-col justify-between items-center max-sm:ablosute top-0 bottom-0 z-20 ${sideBarOpen ? 'translate-x-0' : 'max-sm:translate-x-full'} transtion-all duration-300 ease-in-out`}>
+        <div
+            className={[
+                'w-56 bg-white border-r border-gray-200 flex flex-col justify-between items-center',
+                'sm:static sm:translate-x-0',
+                'max-sm:fixed max-sm:left-0 max-sm:top-0 max-sm:bottom-0 max-sm:z-50',
+                'transition-transform duration-300 ease-out',
+                sideBarOpen ? 'max-sm:translate-x-0' : 'max-sm:-translate-x-full',
+            ].join(' ')}
+        >
             <div className='w-full'>
                 <img onClick={() => navigate('/')} src={assets.logo} className='w-20 ml-4 my-2 cursor-pointer' alt="" />
                 <hr className='border-gray-300 mb-4' />
@@ -27,8 +35,8 @@ const Sidebar = ({ sideBarOpen, setSideBarOpen }) => {
                 <div className='flex gap-2 items-center cursor-pointer'>
                     <UserButton />
                     <div>
-                        <h1 className='text-sm font-medium'>{user.full_name}</h1>
-                        <p className='text-xs text-gray-500'>@{user.username}</p>
+                        <h1 className='text-sm font-medium'>{user?.full_name}</h1>
+                        <p className='text-xs text-gray-500'>@{user?.username}</p>
                     </div>
                 </div>
                 <LogOut onClick={signOut} className='w-3.5 text-gray-400 hover:text-gray-700 transition cursor-pointer' />
