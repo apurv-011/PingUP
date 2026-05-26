@@ -20,7 +20,6 @@ const Layout = () => {
     const [showMobileChrome, setShowMobileChrome] = useState(true)
     const mainRef = useRef(null)
     const { pathname } = useLocation()
-    const lastScrollTopRef = useRef(0)
     const rafRef = useRef(null)
 
     useEffect(() => {
@@ -54,6 +53,13 @@ const Layout = () => {
     }, [sideBarOpen])
 
     useEffect(() => {
+        const isSmallScreen = window.matchMedia?.('(max-width: 639px)')?.matches
+        if (!isSmallScreen) return
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSideBarOpen(false)
+    }, [pathname])
+
+    useEffect(() => {
         try {
             const raw = localStorage.getItem('pingup.notifications.v1')
             if (!raw) return
@@ -81,18 +87,8 @@ const Layout = () => {
             rafRef.current = requestAnimationFrame(() => {
                 rafRef.current = null
                 const st = container.scrollTop
-                const last = lastScrollTopRef.current
-                const delta = st - last
-
-                if (Math.abs(delta) < 6) return
-
-                if (delta > 0 && st > 72) {
-                    setShowMobileChrome(false)
-                } else if (delta < 0) {
-                    setShowMobileChrome(true)
-                }
-
-                lastScrollTopRef.current = st
+                const next = st <= 8
+                setShowMobileChrome((prev) => (prev === next ? prev : next))
             })
         }
 
@@ -121,7 +117,11 @@ const Layout = () => {
 
             <div
                 ref={mainRef}
-                className='flex-1 min-w-0 bg-slate-50 overflow-y-auto'
+                className={[
+                    'flex-1 min-w-0 bg-slate-50 overflow-y-auto',
+                    'max-sm:transition-[padding] max-sm:duration-200 max-sm:ease-out',
+                    showMobileChrome ? 'max-sm:pt-16' : 'max-sm:pt-3',
+                ].join(' ')}
             >
                 <Suspense fallback={<RouteFallback variant='outlet' />}>
                     <Outlet />
@@ -153,7 +153,9 @@ const Layout = () => {
                 className={[
                     'sm:hidden fixed right-3 top-3 z-50',
                     'transition-transform transition-opacity duration-200 ease-out',
-                    showMobileChrome ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3 pointer-events-none',
+                    showMobileChrome && !sideBarOpen
+                        ? 'opacity-100 translate-y-0'
+                        : 'opacity-0 -translate-y-3 pointer-events-none',
                 ].join(' ')}
             >
                 <NotificationsButton />

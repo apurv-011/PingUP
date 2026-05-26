@@ -28,7 +28,11 @@ const Sidebar = ({ sideBarOpen, setSideBarOpen }) => {
                 <img onClick={() => navigate('/')} src={assets.logo} className='w-20 ml-4 my-2 cursor-pointer' alt="" />
                 <hr className='border-gray-300 mb-4' />
                 <MenuItems setSideBarOpen={setSideBarOpen} />
-                <Link to='/create-post' className='flex items-center justify-center gap-2 py-2.5 mt-4 mx-4 rounded-lg bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-700 hover:to-purple-800 active:scale-95 transition text-white cursor-pointer'>
+                <Link
+                  to='/create-post'
+                  onClick={() => setSideBarOpen(false)}
+                  className='flex items-center justify-center gap-2 py-2.5 mt-4 mx-4 rounded-lg bg-linear-to-r from-indigo-500 to-purple-600 hover:from-indigo-700 hover:to-purple-800 active:scale-95 transition text-white cursor-pointer'
+                >
                     <CirclePlus className='w-3 h-3' />
                     Create Post
                 </Link>
