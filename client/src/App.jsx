@@ -10,6 +10,7 @@ import { addMessage } from './features/messages/messagesSlice.js'
 import { useSelector } from 'react-redux'
 import Notification from './components/Notification.jsx'
 import RouteFallback from './components/RouteFallback.jsx'
+import { pushNotification } from './features/notifications/notificationsSlice.js'
 
 const Login = lazy(() => import('./pages/Login'))
 const Layout = lazy(() => import('./pages/Layout'))
@@ -60,6 +61,18 @@ const App = () => {
         if (pathnameRef.current === ('/messages/' + message.from_user_id._id)) {
           dispatch(addMessage(message))
         } else {
+          dispatch(
+            pushNotification({
+              type: 'message',
+              title: message.from_user_id.full_name,
+              body: message.text ? message.text.slice(0, 80) : 'Sent you a message',
+              href: `/messages/${message.from_user_id._id}`,
+              avatarUrl: message.from_user_id.profile_picture,
+              createdAt: message.createdAt,
+              read: false,
+              meta: { messageId: message._id },
+            })
+          )
           toast.custom((t)=>(
             <Notification t={t} message={message} />
           ), {position: "bottom-right"})

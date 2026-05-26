@@ -5,14 +5,23 @@ import { Menu, X } from 'lucide-react'
 import Loading from '../components/Loading'
 import { useSelector } from 'react-redux'
 import RouteFallback from '../components/RouteFallback'
+import NotificationsButton from '../components/NotificationsButton'
+import NotificationsPanel from '../components/NotificationsPanel'
+import { useDispatch } from 'react-redux'
+import { hydrateNotifications } from '../features/notifications/notificationsSlice'
 
 const Layout = () => {
 
     const user = useSelector((state) => state.user.value)
+    const notificationsItems = useSelector((state) => state.notifications.items)
+    const dispatch = useDispatch()
 
     const [sideBarOpen, setSideBarOpen] = useState(false)
+    const [showMobileChrome, setShowMobileChrome] = useState(true)
     const mainRef = useRef(null)
     const { pathname } = useLocation()
+    const lastScrollTopRef = useRef(0)
+    const rafRef = useRef(null)
 
     useEffect(() => {
         const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
@@ -44,6 +53,56 @@ const Layout = () => {
         }
     }, [sideBarOpen])
 
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('pingup.notifications.v1')
+            if (!raw) return
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) dispatch(hydrateNotifications(parsed))
+        } catch {
+            // ignore
+        }
+    }, [dispatch])
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('pingup.notifications.v1', JSON.stringify(notificationsItems.slice(0, 50)))
+        } catch {
+            // ignore
+        }
+    }, [notificationsItems])
+
+    useEffect(() => {
+        const container = mainRef.current
+        if (!container) return
+
+        const onScroll = () => {
+            if (rafRef.current) return
+            rafRef.current = requestAnimationFrame(() => {
+                rafRef.current = null
+                const st = container.scrollTop
+                const last = lastScrollTopRef.current
+                const delta = st - last
+
+                if (Math.abs(delta) < 6) return
+
+                if (delta > 0 && st > 72) {
+                    setShowMobileChrome(false)
+                } else if (delta < 0) {
+                    setShowMobileChrome(true)
+                }
+
+                lastScrollTopRef.current = st
+            })
+        }
+
+        container.addEventListener('scroll', onScroll, { passive: true })
+        return () => {
+            container.removeEventListener('scroll', onScroll)
+            if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        }
+    }, [])
+
     return user ? (
         <div className='w-full flex h-dvh overflow-hidden'>
 
@@ -69,6 +128,8 @@ const Layout = () => {
                 </Suspense>
             </div>
 
+            <NotificationsPanel />
+
             <button
                 type='button'
                 aria-label={sideBarOpen ? 'Close menu' : 'Open menu'}
@@ -80,11 +141,23 @@ const Layout = () => {
                     'flex items-center justify-center text-gray-700',
                     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 focus-visible:outline-offset-2',
                     'active:scale-95 transition will-change-transform touch-manipulation',
+                    'transition-transform transition-opacity duration-200 ease-out',
+                    showMobileChrome ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3 pointer-events-none',
                 ].join(' ')}
                 onClick={() => setSideBarOpen((v) => !v)}
             >
                 {sideBarOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
             </button>
+
+            <div
+                className={[
+                    'sm:hidden fixed right-3 top-3 z-50',
+                    'transition-transform transition-opacity duration-200 ease-out',
+                    showMobileChrome ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3 pointer-events-none',
+                ].join(' ')}
+            >
+                <NotificationsButton />
+            </div>
         </div>
     ) : (
         <Loading />
