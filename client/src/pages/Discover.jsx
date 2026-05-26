@@ -10,7 +10,7 @@ import { fetchUser } from '../features/user/userSlice'
 
 const Discover = () => {
 
-  const dispatch = useDispatch
+  const dispatch = useDispatch()
   const [input, setInput] = useState('')
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(false)
@@ -36,10 +36,16 @@ const Discover = () => {
   }
 
   useEffect(() => {
-    getToken(). then((token)=>{
+    let cancelled = false
+    ;(async () => {
+      const token = await getToken()
+      if (cancelled) return
       dispatch(fetchUser(token))
-    })
-  }, [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [dispatch, getToken])
   
 
   return (

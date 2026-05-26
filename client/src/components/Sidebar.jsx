@@ -13,11 +13,14 @@ const Sidebar = ({ sideBarOpen, setSideBarOpen }) => {
 
     return (
         <div
+            id='app-sidebar'
+            aria-label='Sidebar navigation'
             className={[
                 'w-56 bg-white border-r border-gray-200 flex flex-col justify-between items-center',
                 'sm:static sm:translate-x-0',
                 'max-sm:fixed max-sm:left-0 max-sm:top-0 max-sm:bottom-0 max-sm:z-50',
-                'transition-transform duration-300 ease-out',
+                'max-sm:shadow-xl',
+                'transition-transform duration-300 ease-out will-change-transform',
                 sideBarOpen ? 'max-sm:translate-x-0' : 'max-sm:-translate-x-full',
             ].join(' ')}
         >

@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { assets } from '../assets/assets'
 import Loading from '../components/Loading'
 import StoriesBar from '../components/StoriesBar'
@@ -15,7 +15,7 @@ const Feed = () => {
   const [loading, setLoading] = useState(true)
   const { getToken } = useAuth()
 
-  const fetchFeeds = async () => {
+  const fetchFeeds = useCallback(async () => {
     try {
       setLoading(true)
       const { data } = await api.get('/api/post/feed', {headers: {Authorization: `Bearer ${await getToken()}`}})
@@ -28,11 +28,11 @@ const Feed = () => {
       toast.error(error.message)
     }
     setLoading(false)
-  }
+  }, [getToken])
 
   useEffect(() => {
     fetchFeeds()
-  }, [])
+  }, [fetchFeeds])
 
 
   return !loading ? (

@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import moment from 'moment'
 import { useAuth, useUser } from '@clerk/react'
@@ -9,11 +9,12 @@ import toast from 'react-hot-toast'
 const RecentMessages = () => {
 
     const [messages, setMessages] = useState([])
+    const intervalRef = useRef(null)
 
     const { user } = useUser()
     const { getToken } = useAuth()
 
-    const fetchRecentMessages = async () => {
+    const fetchRecentMessages = useCallback(async () => {
         try {
             const token = await getToken()
             const { data } = await api.get('/api/user/recent-messages', {
@@ -38,15 +39,18 @@ const RecentMessages = () => {
         } catch (error) {
             toast.error(error.message)
         }
-    }
+    }, [getToken])
 
     useEffect(() => {
-        if (user) {
-            fetchRecentMessages()
-            setInterval(fetchRecentMessages, 30000)
-            return ()=>{clearInterval()}
+        if (!user) return
+
+        fetchRecentMessages()
+        intervalRef.current = setInterval(fetchRecentMessages, 30000)
+
+        return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current)
         }
-    }, [user])
+    }, [fetchRecentMessages, user])
 
 
     return (

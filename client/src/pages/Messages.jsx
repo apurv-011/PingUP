@@ -21,19 +21,19 @@ const Messages = () => {
         {/* Connected Users */}
         <div className='flex flex-col gap-3'>
           {connections.map((user) => (
-            <div key={user._id} className='max-w-xl flex flex-wrap gap-5 p-4 bg-white shadow rounded-md'>
-              <img src={user.profile_picture} alt="" className='rounded-full size-12 mx-auto' />
-              <div className='flex-1'>
+            <div key={user._id} className='w-full max-w-xl flex items-center gap-4 p-4 bg-white shadow-sm rounded-xl border border-black/5'>
+              <img src={user.profile_picture} alt="" className='rounded-full size-12 shrink-0' />
+              <div className='flex-1 min-w-0'>
                 <p className='font-medium text-slate-700'>{user.full_name}</p>
                 <p className='text-slate-500'>@{user.username}</p>
-                <p className='text-sm text-gray-600'>{user.bio}</p>
+                {user.bio && <p className='text-sm text-gray-600 line-clamp-2'>{user.bio}</p>}
               </div>
-              <div className='flex flex-col gap-2 mt-4'>
-                <button onClick={() => navigate(`/messages/${user._id}`)} className='size-10 flex items-center justify-center text-sm rounded bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95 transition cursor-pointer gap-1'>
+              <div className='flex flex-row sm:flex-col gap-2'>
+                <button onClick={() => navigate(`/messages/${user._id}`)} className='size-11 flex items-center justify-center text-sm rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95 transition cursor-pointer gap-1 touch-manipulation'>
                   <MessageSquare className='w-4 h-4' />
                 </button>
 
-                <button onClick={() => navigate(`/profile/${user._id}`)} className='size-10 flex items-center justify-center text-sm rounded bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95 transition cursor-pointer'>
+                <button onClick={() => navigate(`/profile/${user._id}`)} className='size-11 flex items-center justify-center text-sm rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95 transition cursor-pointer touch-manipulation'>
                   <Eye className='w-4 h-4' />
                 </button>
               </div>

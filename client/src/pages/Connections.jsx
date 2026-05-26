@@ -58,10 +58,16 @@ const Connections = () => {
   }
 
   useEffect(() => {
-    getToken().then((token) => {
+    let cancelled = false
+    ;(async () => {
+      const token = await getToken()
+      if (cancelled) return
       dispatch(fetchConnections(token))
-    })
-  }, [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [dispatch, getToken])
 
 
 

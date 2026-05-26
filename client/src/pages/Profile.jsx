@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Loading from '../components/Loading'
 import UserProfileInfo from '../components/UserProfileInfo'
@@ -22,12 +22,12 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState('posts')
   const [showEdit, setShowEdit] = useState(false)
 
-  const fetchUser = async (profileId) => {
+  const fetchUser = useCallback(async (profileIdToFetch) => {
     const token = await getToken()
     try {
       const response = await api.post(
         `/api/user/profiles`,
-        { profileId },
+        { profileId: profileIdToFetch },
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -43,15 +43,12 @@ const Profile = () => {
       toast.error(error.message)
     }
 
-  }
+  }, [getToken])
 
   useEffect(() => {
-    if (profileId) {
-      fetchUser(profileId)
-    } else {
-      fetchUser(currentUser._id)
-    }
-  }, [profileId, currentUser])
+    if (!currentUser?._id) return
+    fetchUser(profileId || currentUser._id)
+  }, [currentUser?._id, fetchUser, profileId])
 
 
   return user ? (

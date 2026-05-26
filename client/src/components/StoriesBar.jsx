@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import moment from 'moment'
 import StoryModel from './StoryModel'
@@ -16,7 +16,7 @@ const StoriesBar = () => {
     const [showModel, setShowModel] = useState(false)
     const [viewStory, setViewStory] = useState(null)
 
-    const fetchStories = async () => {
+    const fetchStories = useCallback(async () => {
         try {
             const token = await getToken();
             const { data } = await api.get('/api/story/get', {
@@ -31,11 +31,11 @@ const StoriesBar = () => {
         } catch (error) {
             toast.error(error.message)
         }
-    }
+    }, [getToken])
 
     useEffect(() => {
         fetchStories()
-    }, [])
+    }, [fetchStories])
 
 
     return (
