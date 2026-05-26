@@ -52,8 +52,8 @@ const CreatePost = () => {
   }
 
   return (
-    <div className='min-h-full bg-linear-to-b from-slate-50 to-white'>
-      <div className='max-w-6xl mx-auto p-3 sm:p-6'>
+    <div className='min-h-screen bg-linear-to-b from-slate-50 to-white'>
+      <div className='max-w-6xl mx-auto p-3'>
         {/* Title */}
         <div className='mb-6'>
           <h1 className='text-3xl font-bold text-slate-900 mb-2'>Create Post</h1>
