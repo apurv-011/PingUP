@@ -20,6 +20,7 @@ import {
   pushNotification,
   removeNotification,
 } from './features/notifications/notificationsSlice.js'
+import { apiBaseUrl } from './api/axios.js'
 
 const Login = lazy(() => import('./pages/Login'))
 const Layout = lazy(() => import('./pages/Layout'))
@@ -59,9 +60,7 @@ const App = () => {
   useEffect(() => {
     if (!currentUser?._id) return undefined
 
-    const eventSource = new EventSource(
-      import.meta.env.VITE_BASEURL + '/api/message/' + currentUser._id,
-    )
+    const eventSource = new EventSource(apiBaseUrl + '/api/message/' + currentUser._id)
 
     eventSource.onmessage = (event) => {
       const payload = JSON.parse(event.data)
@@ -127,7 +126,7 @@ const App = () => {
   useEffect(() => {
     if (!currentUser?._id) return undefined
 
-    const postSource = new EventSource(import.meta.env.VITE_BASEURL + '/api/post/stream/' + currentUser._id)
+    const postSource = new EventSource(apiBaseUrl + '/api/post/stream/' + currentUser._id)
 
     postSource.onmessage = (event) => {
       const payload = JSON.parse(event.data)
@@ -145,7 +144,7 @@ const App = () => {
     if (!currentUser?._id) return undefined
 
     const notificationSource = new EventSource(
-      import.meta.env.VITE_BASEURL + '/api/notifications/stream/' + currentUser._id,
+      apiBaseUrl + '/api/notifications/stream/' + currentUser._id,
     )
 
     notificationSource.onmessage = (event) => {
@@ -173,7 +172,7 @@ const App = () => {
     if (!currentUser?._id) return undefined
 
     const connectionSource = new EventSource(
-      import.meta.env.VITE_BASEURL + '/api/user/stream/' + currentUser._id,
+      apiBaseUrl + '/api/user/stream/' + currentUser._id,
     )
 
     connectionSource.onmessage = (event) => {
