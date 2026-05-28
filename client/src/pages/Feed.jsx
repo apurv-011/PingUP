@@ -34,6 +34,17 @@ const Feed = () => {
     fetchFeeds()
   }, [fetchFeeds])
 
+  useEffect(() => {
+    const handlePostEvent = (event) => {
+      const payload = event?.detail
+      if (payload?.type !== 'post_deleted' || !payload.postId) return
+      setFeeds((current) => current.filter((post) => post._id !== payload.postId))
+    }
+
+    window.addEventListener('pingup:post-event', handlePostEvent)
+    return () => window.removeEventListener('pingup:post-event', handlePostEvent)
+  }, [])
+
 
   return !loading ? (
     <div className='h-full overflow-y-scroll no-scrollbar py-8 xl:pr-3 flex items-start justify-center xl:gap-6'>

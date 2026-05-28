@@ -1,16 +1,25 @@
-import React, { Suspense, lazy, useRef } from 'react'
+import React, { Suspense, lazy, useEffect, useRef } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { useUser, useAuth } from '@clerk/react'
 import toast, { Toaster } from 'react-hot-toast'
-import { useEffect } from 'react'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { fetchUser } from './features/user/userSlice.js'
-import { fetchConnections } from './features/connections/connectionsSlice.js'
-import { addMessage } from './features/messages/messagesSlice.js'
-import { useSelector } from 'react-redux'
+import { fetchConnections, removeConnectionLocally } from './features/connections/connectionsSlice.js'
+import {
+  addMessage,
+  removeMessageForViewer,
+  touchMessageFeed,
+  resetMessages,
+  updateMessage,
+} from './features/messages/messagesSlice.js'
 import Notification from './components/Notification.jsx'
 import RouteFallback from './components/RouteFallback.jsx'
-import { fetchNotifications, pushNotification } from './features/notifications/notificationsSlice.js'
+import {
+  clearNotificationsLocally,
+  fetchNotifications,
+  pushNotification,
+  removeNotification,
+} from './features/notifications/notificationsSlice.js'
 
 const Login = lazy(() => import('./pages/Login'))
 const Layout = lazy(() => import('./pages/Layout'))
@@ -23,11 +32,9 @@ const Profile = lazy(() => import('./pages/Profile'))
 const CreatePost = lazy(() => import('./pages/CreatePost'))
 
 const App = () => {
-
   const currentUser = useSelector((state) => state.user.value)
-
   const { user } = useUser()
-  const { getToken } = useAuth();
+  const { getToken } = useAuth()
   const { pathname } = useLocation()
   const pathnameRef = useRef(pathname)
 
@@ -35,15 +42,14 @@ const App = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (user) {
-        const token = await getToken()
-        dispatch(fetchUser(token))
-        dispatch(fetchConnections(token))
-        dispatch(fetchNotifications(token))
-      }
+      if (!user) return
+      const token = await getToken()
+      dispatch(fetchUser(token))
+      dispatch(fetchConnections(token))
+      dispatch(fetchNotifications(token))
     }
-    fetchData()
 
+    fetchData()
   }, [user, getToken, dispatch])
 
   useEffect(() => {
@@ -51,52 +57,111 @@ const App = () => {
   }, [pathname])
 
   useEffect(() => {
-    if (currentUser?._id) {
-      const eventSource = new EventSource(
-        import.meta.env.VITE_BASEURL + '/api/message/' + currentUser._id
-      )
+    if (!currentUser?._id) return undefined
 
-      eventSource.onmessage = (event) => {
-        const message = JSON.parse(event.data)
+    const eventSource = new EventSource(
+      import.meta.env.VITE_BASEURL + '/api/message/' + currentUser._id,
+    )
 
-        if (pathnameRef.current === ('/messages/' + message.from_user_id._id)) {
-          dispatch(addMessage(message))
-        } else {
-          dispatch(
-            pushNotification({
-              type: 'message',
-              title: message.from_user_id.full_name,
-              body: message.text ? message.text.slice(0, 80) : 'Sent you a message',
-              href: `/messages/${message.from_user_id._id}`,
-              avatarUrl: message.from_user_id.profile_picture,
-              createdAt: message.createdAt,
-              read: false,
-              meta: { messageId: message._id },
-            })
-          )
-          toast.custom((t)=>(
-            <Notification t={t} message={message} />
-          ), {position: "bottom-right"})
+    eventSource.onmessage = (event) => {
+      const payload = JSON.parse(event.data)
+
+      if (payload?.type === 'message') {
+        const message = payload.message
+        const senderId = message?.from_user_id?._id || message?.from_user_id
+        const recipientId = message?.to_user_id?._id || message?.to_user_id
+        const isActiveChat =
+          pathnameRef.current === `/messages/${senderId}` ||
+          pathnameRef.current === `/messages/${recipientId}`
+
+        if (payload.action === 'created') {
+          if (isActiveChat) {
+            dispatch(addMessage(message))
+          } else {
+            dispatch(touchMessageFeed())
+            dispatch(
+              pushNotification({
+                type: 'message',
+                title: message.from_user_id?.full_name || message.from_user_id?.username || 'New message',
+                body: message.text ? message.text.slice(0, 80) : 'Sent you a message',
+                href: `/messages/${senderId}`,
+                avatarUrl: message.from_user_id?.profile_picture || null,
+                createdAt: message.createdAt,
+                read: false,
+                meta: { messageId: message._id },
+              }),
+            )
+            toast.custom(
+              (t) => <Notification t={t} message={message} />,
+              { position: 'bottom-right' },
+            )
+          }
+          return
+        }
+
+        if (payload.action === 'deleted' || payload.action === 'deleted_for_everyone') {
+          dispatch(removeMessageForViewer(payload.messageId || message?._id))
+          dispatch(touchMessageFeed())
+          return
+        }
+
+        if (payload.action === 'media_deleted') {
+          if (isActiveChat) {
+            dispatch(updateMessage(message))
+          }
+          dispatch(touchMessageFeed())
+          return
+        }
+
+        if (payload.type === 'conversation_removed') {
+          dispatch(touchMessageFeed())
         }
       }
-      return () => {
-        eventSource.close()
-      }
+    }
+
+    return () => {
+      eventSource.close()
     }
   }, [currentUser?._id, dispatch])
 
   useEffect(() => {
-    if (!currentUser?._id) return
+    if (!currentUser?._id) return undefined
+
+    const postSource = new EventSource(import.meta.env.VITE_BASEURL + '/api/post/stream/' + currentUser._id)
+
+    postSource.onmessage = (event) => {
+      const payload = JSON.parse(event.data)
+      if (!payload || payload.type === 'connected') return
+
+      window.dispatchEvent(new CustomEvent('pingup:post-event', { detail: payload }))
+    }
+
+    return () => {
+      postSource.close()
+    }
+  }, [currentUser?._id])
+
+  useEffect(() => {
+    if (!currentUser?._id) return undefined
 
     const notificationSource = new EventSource(
-      import.meta.env.VITE_BASEURL + '/api/notifications/stream/' + currentUser._id
+      import.meta.env.VITE_BASEURL + '/api/notifications/stream/' + currentUser._id,
     )
 
     notificationSource.onmessage = (event) => {
       const payload = JSON.parse(event.data)
-      if (payload?.type !== 'notification' || !payload.notification) return
 
-      dispatch(pushNotification(payload.notification))
+      if (payload?.type === 'notification' && payload.notification) {
+        dispatch(pushNotification(payload.notification))
+      }
+
+      if (payload?.type === 'notification_deleted' && payload.id) {
+        dispatch(removeNotification(payload.id))
+      }
+
+      if (payload?.type === 'notifications_cleared') {
+        dispatch(clearNotificationsLocally())
+      }
     }
 
     return () => {
@@ -104,8 +169,37 @@ const App = () => {
     }
   }, [currentUser?._id, dispatch])
 
+  useEffect(() => {
+    if (!currentUser?._id) return undefined
 
+    const connectionSource = new EventSource(
+      import.meta.env.VITE_BASEURL + '/api/user/stream/' + currentUser._id,
+    )
 
+    connectionSource.onmessage = (event) => {
+      const payload = JSON.parse(event.data)
+
+      if (payload?.type !== 'connection_removed') return
+
+      dispatch(removeConnectionLocally(payload))
+      dispatch(touchMessageFeed())
+
+      if (payload.mode === 'delete' && pathnameRef.current === `/messages/${payload.targetUserId}`) {
+        dispatch(resetMessages())
+      }
+
+      ;(async () => {
+        const token = await getToken()
+        if (token) {
+          dispatch(fetchConnections(token))
+        }
+      })()
+    }
+
+    return () => {
+      connectionSource.close()
+    }
+  }, [currentUser?._id, dispatch, getToken])
 
   return (
     <>
@@ -124,7 +218,7 @@ const App = () => {
           </Route>
         </Routes>
       </Suspense>
-    </ >
+    </>
   )
 }
 

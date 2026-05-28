@@ -1,8 +1,10 @@
-import fs from "fs";
-import imagekit from "../config/imagekit.js";
+import mongoose from "mongoose";
 import Post from "../models/Post.js";
 import User from "../models/User.js";
+import Notification from "../models/Notification.js";
 import { createNotification } from "../services/notificationService.js";
+import { deletePostMedia, uploadPostMedia } from "../services/postMediaCleanup.js";
+import { emitStreamEvent, emitStreamEventToMany, registerStream, streamChannels, unregisterStream } from "../services/realtimeHub.js";
 
 const getUserIdFromRequest = (req) => {
   const auth = typeof req.auth === "function" ? req.auth() : req.auth;
@@ -15,28 +17,22 @@ const getPagination = (req) => {
   return { page, limit, skip: (page - 1) * limit };
 };
 
-const uploadPostMedia = async (files = []) => {
-  if (!files.length) return [];
+export const streamPosts = (req, res) => {
+  const { userId } = req.params;
 
-  return Promise.all(
-    files.map(async (file) => {
-      const fileBuffer = fs.readFileSync(file.path);
-      const response = await imagekit.upload({
-        file: fileBuffer,
-        fileName: file.originalname,
-        folder: "posts",
-      });
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
 
-      return imagekit.url({
-        path: response.filePath,
-        transformation: [
-          { quality: "auto" },
-          { format: "webp" },
-          { width: "1280" },
-        ],
-      });
-    }),
-  );
+  registerStream("posts", userId, res);
+  res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
+
+  req.on("close", () => {
+    unregisterStream("posts", userId);
+  });
 };
 
 // add post
@@ -46,7 +42,8 @@ export const addPost = async (req, res) => {
     const { content = "", post_type } = req.body;
     const images = Array.isArray(req.files) ? req.files : [];
 
-    const image_urls = await uploadPostMedia(images);
+    const image_assets = await uploadPostMedia(images);
+    const image_urls = image_assets.map((asset) => asset.url);
     const resolvedPostType =
       post_type || (image_urls.length ? (content ? "text_with_image" : "image") : "text");
 
@@ -61,6 +58,7 @@ export const addPost = async (req, res) => {
       user: userId,
       content,
       image_urls,
+      image_assets,
       post_type: resolvedPostType,
     });
 
@@ -70,6 +68,99 @@ export const addPost = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deletePost = async (req, res) => {
+  const session = await mongoose.startSession();
+
+  try {
+    const userId = getUserIdFromRequest(req);
+    const { postId } = req.params;
+
+    if (!userId || !postId) {
+      return res.status(400).json({ success: false, message: "Missing post id" });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    if (String(post.user) !== String(userId)) {
+      return res.status(403).json({ success: false, message: "You can only delete your own post" });
+    }
+
+    let mediaCleanup = { deletedCount: 0, failed: [] };
+    try {
+      mediaCleanup = await deletePostMedia(post);
+    } catch (cleanupError) {
+      console.error("Post media cleanup failed:", cleanupError);
+      mediaCleanup = {
+        deletedCount: 0,
+        failed: [{ error: cleanupError.message }],
+      };
+    }
+
+    const relatedNotifications = await Notification.find({
+      entityType: "post",
+      entityId: post._id.toString(),
+    })
+      .select("_id")
+      .lean();
+
+    let deletedPost;
+    let deletedNotificationCount = 0;
+
+    await session.withTransaction(async () => {
+      const notificationResult = await Notification.deleteMany(
+        {
+          entityType: "post",
+          entityId: post._id.toString(),
+        },
+        { session },
+      );
+      deletedNotificationCount = notificationResult.deletedCount || 0;
+
+      deletedPost = await Post.findOneAndDelete(
+        { _id: postId, user: userId },
+        { session, new: false },
+      );
+    });
+
+    if (!deletedPost) {
+      return res.status(404).json({ success: false, message: "Post not found" });
+    }
+
+    const payload = {
+      type: "post_deleted",
+      postId: post._id.toString(),
+      userId,
+    };
+
+    const connectedPostViewers = Array.from(streamChannels.posts?.keys?.() || []);
+    emitStreamEventToMany("posts", connectedPostViewers, payload);
+
+    relatedNotifications.forEach((notification) => {
+      emitStreamEvent("notifications", userId, {
+        type: "notification_deleted",
+        id: notification._id.toString(),
+      });
+    });
+
+    return res.json({
+      success: true,
+      message: "Post deleted successfully",
+      postId: post._id.toString(),
+      deletedNotificationCount,
+      mediaCleanup,
+      realtime: payload,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.endSession();
   }
 };
 

@@ -1,7 +1,7 @@
 import { assets } from '../assets/assets'
 import { Link, useNavigate } from 'react-router-dom'
 import MenuItems from './MenuItems'
-import { CirclePlus, LogOut } from 'lucide-react'
+import { CirclePlus, LogOut, X } from 'lucide-react'
 import { UserButton, useClerk } from '@clerk/react'
 import { useSelector } from 'react-redux'
 
@@ -19,13 +19,23 @@ const Sidebar = ({ sideBarOpen, setSideBarOpen }) => {
                 'w-56 bg-white border-r border-gray-200 flex flex-col justify-between items-center',
                 'sm:static sm:translate-x-0',
                 'max-sm:fixed max-sm:left-0 max-sm:top-0 max-sm:bottom-0 max-sm:z-50',
-                'max-sm:shadow-xl',
+                'max-sm:shadow-xl max-sm:overflow-y-auto',
                 'transition-transform duration-300 ease-out will-change-transform',
                 sideBarOpen ? 'max-sm:translate-x-0' : 'max-sm:-translate-x-full',
             ].join(' ')}
         >
             <div className='w-full'>
-                <img onClick={() => navigate('/')} src={assets.logo} className='w-20 ml-4 my-2 cursor-pointer' alt="" />
+                <div className='flex items-center justify-between gap-3 px-4 py-4 sm:block'>
+                    <img onClick={() => navigate('/')} src={assets.logo} className='w-20 cursor-pointer' alt="" />
+                    <button
+                        type='button'
+                        onClick={() => setSideBarOpen(false)}
+                        aria-label='Close sidebar'
+                        className='sm:hidden h-10 w-10 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 active:scale-95 transition touch-manipulation'
+                    >
+                        <X className='h-5 w-5' />
+                    </button>
+                </div>
                 <hr className='border-gray-300 mb-4' />
                 <MenuItems setSideBarOpen={setSideBarOpen} />
                 <Link

@@ -1,5 +1,7 @@
 import express from "express";
 import {
+  clearNotifications,
+  deleteNotification,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -14,5 +16,7 @@ notificationRouter.get("/stream", protect, streamNotifications);
 notificationRouter.get("/stream/:userId", streamNotifications);
 notificationRouter.patch("/:id/read", protect, markNotificationRead);
 notificationRouter.patch("/read-all", protect, markAllNotificationsRead);
+notificationRouter.delete("/:id", protect, deleteNotification);
+notificationRouter.delete("/", protect, clearNotifications);
 
 export default notificationRouter;

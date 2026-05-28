@@ -5,6 +5,7 @@ import Post from "../models/Post.js";
 import User from "../models/User.js";
 import fs from "fs";
 import { createNotification } from "../services/notificationService.js";
+import { removeConnectionCleanup } from "../services/connectionService.js";
 
 const getUserIdFromRequest = (req) => {
   const auth = typeof req.auth === "function" ? req.auth() : req.auth;
@@ -330,6 +331,32 @@ export const acceptConnectionRequest = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.json({ success: false, message: "User not found" });
+  }
+}
+
+export const removeConnection = async (req, res) => {
+  try {
+    const userId = getUserIdFromRequest(req);
+    const { id } = req.body;
+
+    if (!userId || !id) {
+      return res.status(400).json({ success: false, message: "Missing connection id" });
+    }
+
+    const result = await removeConnectionCleanup({
+      userId,
+      targetUserId: id,
+      mode: process.env.CHAT_REMOVAL_MODE || "readonly",
+    });
+
+    if (!result?.success) {
+      return res.status(404).json(result || { success: false, message: "Connection not found" });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 }
 

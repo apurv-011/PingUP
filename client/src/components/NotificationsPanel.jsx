@@ -1,15 +1,22 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { CheckCheck, X } from 'lucide-react'
+import { CheckCheck, Trash2, X } from 'lucide-react'
 import { useAuth } from '@clerk/react'
+import toast from 'react-hot-toast'
 import {
   closeNotifications,
+  clearNotificationsAsync,
+  clearNotificationsLocally,
+  fetchNotifications,
   markAllNotificationsRead,
   markAllNotificationsReadAsync,
   markNotificationRead,
   markNotificationReadAsync,
+  deleteNotificationAsync,
+  removeNotification,
 } from '../features/notifications/notificationsSlice'
+import ConfirmDialog from './ConfirmDialog'
 
 const timeAgo = (iso) => {
   try {
@@ -34,6 +41,9 @@ const NotificationsPanel = () => {
   const { getToken } = useAuth()
   const { isOpen, items, unreadCount } = useSelector((s) => s.notifications)
   const panelRef = useRef(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState(null)
+  const [isClearingAll, setIsClearingAll] = useState(false)
+  const [dialogState, setDialogState] = useState({ open: false, type: null, id: null })
 
   const visibleItems = useMemo(() => items.slice(0, 30), [items])
 
@@ -64,6 +74,59 @@ const NotificationsPanel = () => {
     const token = await getToken()
     if (token) {
       dispatch(markNotificationReadAsync({ token, id: notificationId }))
+    }
+  }
+
+  const requestDeleteNotification = (notificationId) => {
+    setDialogState({
+      open: true,
+      type: 'single',
+      id: notificationId,
+    })
+  }
+
+  const confirmDeleteNotification = async () => {
+    if (!dialogState.id) return
+    setPendingDeleteId(dialogState.id)
+    const token = await getToken()
+    try {
+      dispatch(removeNotification(dialogState.id))
+      if (token) {
+        const result = await dispatch(deleteNotificationAsync({ token, id: dialogState.id }))
+        if (deleteNotificationAsync.rejected.match(result)) {
+          throw new Error(result.error?.message || 'Failed to delete notification')
+        }
+      }
+    } catch (error) {
+      toast.error(error.message)
+      if (token) {
+        dispatch(fetchNotifications(token))
+      }
+    } finally {
+      setPendingDeleteId(null)
+      setDialogState({ open: false, type: null, id: null })
+    }
+  }
+
+  const confirmClearNotifications = async () => {
+    setIsClearingAll(true)
+    const token = await getToken()
+    try {
+      dispatch(clearNotificationsLocally())
+      if (token) {
+        const result = await dispatch(clearNotificationsAsync(token))
+        if (clearNotificationsAsync.rejected.match(result)) {
+          throw new Error(result.error?.message || 'Failed to clear notifications')
+        }
+      }
+    } catch (error) {
+      toast.error(error.message)
+      if (token) {
+        dispatch(fetchNotifications(token))
+      }
+    } finally {
+      setIsClearingAll(false)
+      setDialogState({ open: false, type: null, id: null })
     }
   }
 
@@ -110,6 +173,15 @@ const NotificationsPanel = () => {
             >
               <CheckCheck className='h-4 w-4' />
               Read
+            </button>
+            <button
+              type='button'
+              className='h-9 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 transition text-slate-800 text-sm flex items-center gap-2 touch-manipulation'
+              onClick={() => setDialogState({ open: true, type: 'clear', id: null })}
+              disabled={items.length === 0}
+            >
+              <Trash2 className='h-4 w-4' />
+              Clear
             </button>
             <button
               type='button'
@@ -168,6 +240,22 @@ const NotificationsPanel = () => {
                         <p className='text-sm text-slate-600 line-clamp-2'>{notification.body}</p>
                       )}
                     </div>
+                    <span
+                      role='button'
+                      tabIndex={0}
+                      className='shrink-0 h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500'
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        requestDeleteNotification(notification.id)
+                      }}
+                    >
+                      {pendingDeleteId === notification.id ? (
+                        <span className='h-3 w-3 rounded-full border-2 border-slate-400 border-t-transparent animate-spin' />
+                      ) : (
+                        <Trash2 className='h-4 w-4' />
+                      )}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -175,6 +263,19 @@ const NotificationsPanel = () => {
           )}
         </div>
       </aside>
+      <ConfirmDialog
+        open={dialogState.open}
+        title={dialogState.type === 'clear' ? 'Clear all notifications?' : 'Delete notification?'}
+        description={
+          dialogState.type === 'clear'
+            ? 'This removes every notification from your inbox and resets the badge count.'
+            : 'This removes the notification from your inbox and updates your unread count.'
+        }
+        confirmLabel={dialogState.type === 'clear' ? 'Clear all' : 'Delete'}
+      onCancel={() => setDialogState({ open: false, type: null, id: null })}
+      onConfirm={dialogState.type === 'clear' ? confirmClearNotifications : confirmDeleteNotification}
+        loading={isClearingAll || pendingDeleteId === dialogState.id}
+      />
     </>
   )
 }

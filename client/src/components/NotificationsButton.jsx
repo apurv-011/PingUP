@@ -13,7 +13,7 @@ const NotificationsButton = ({ className = '' }) => {
       aria-label='Notifications'
       aria-expanded={isOpen}
       className={[
-        'relative h-11 w-11 rounded-lg bg-white/95 shadow ring-1 ring-black/5',
+        'relative h-11 w-11 shrink-0 rounded-lg bg-white/95 shadow ring-1 ring-black/5',
         'flex items-center justify-center text-gray-700',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 focus-visible:outline-offset-2',
         'active:scale-95 transition will-change-transform touch-manipulation',
@@ -32,4 +32,3 @@ const NotificationsButton = ({ className = '' }) => {
 }
 
 export default NotificationsButton
-

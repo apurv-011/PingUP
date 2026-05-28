@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import { Outlet, useLocation } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import Loading from '../components/Loading'
 import { useSelector } from 'react-redux'
 import RouteFallback from '../components/RouteFallback'
@@ -138,35 +138,35 @@ const Layout = () => {
 
             <NotificationsPanel />
 
-            <button
-                type='button'
-                aria-label={sideBarOpen ? 'Close menu' : 'Open menu'}
-                aria-controls='app-sidebar'
-                aria-expanded={sideBarOpen}
-                className={[
-                    'sm:hidden fixed left-3 top-3 z-50',
-                    'h-11 w-11 rounded-lg bg-white/95 shadow ring-1 ring-black/5',
-                    'flex items-center justify-center text-gray-700',
-                    'focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 focus-visible:outline-offset-2',
-                    'active:scale-95 transition will-change-transform touch-manipulation',
-                    'transition-transform transition-opacity duration-200 ease-out',
-                    showMobileChrome ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3 pointer-events-none',
-                ].join(' ')}
-                onClick={() => setSideBarOpen((v) => !v)}
-            >
-                {sideBarOpen ? <X className='h-5 w-5' /> : <Menu className='h-5 w-5' />}
-            </button>
-
             <div
                 className={[
-                    'sm:hidden fixed right-3 top-3 z-50',
-                    'transition-transform transition-opacity duration-200 ease-out',
-                    showMobileChrome && !sideBarOpen
-                        ? 'opacity-100 translate-y-0'
-                        : 'opacity-0 -translate-y-3 pointer-events-none',
+                    'sm:hidden fixed inset-x-0 top-0 z-50 flex items-start justify-between px-3 pt-3',
+                    'pointer-events-none transition-transform transition-opacity duration-200 ease-out',
+                    showMobileChrome ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-3',
                 ].join(' ')}
             >
-                <NotificationsButton />
+                <button
+                    type='button'
+                    aria-label={sideBarOpen ? 'Close menu' : 'Open menu'}
+                    aria-controls='app-sidebar'
+                    aria-expanded={sideBarOpen}
+                    className={[
+                        'pointer-events-auto h-11 w-11 shrink-0 rounded-lg bg-white/95 shadow ring-1 ring-black/5',
+                        'flex items-center justify-center text-gray-700',
+                        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 focus-visible:outline-offset-2',
+                        'active:scale-95 transition will-change-transform touch-manipulation',
+                        sideBarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100',
+                    ].join(' ')}
+                    onClick={() => setSideBarOpen((v) => !v)}
+                >
+                    <Menu className='h-5 w-5' />
+                </button>
+
+                {!sideBarOpen && (
+                    <div className='pointer-events-auto'>
+                        <NotificationsButton />
+                    </div>
+                )}
             </div>
         </div>
     ) : (

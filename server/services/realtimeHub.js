@@ -1,6 +1,7 @@
 const streams = {
   messages: new Map(),
   notifications: new Map(),
+  posts: new Map(),
 };
 
 export const registerStream = (channel, userId, res) => {
@@ -29,6 +30,12 @@ export const emitStreamEvent = (channel, userId, payload) => {
 
   stream.write(`data: ${JSON.stringify(payload)}\n\n`);
   return true;
+};
+
+export const emitStreamEventToMany = (channel, userIds, payload) => {
+  if (!Array.isArray(userIds)) return false;
+
+  return userIds.some((userId) => emitStreamEvent(channel, userId, payload));
 };
 
 export const streamChannels = streams;

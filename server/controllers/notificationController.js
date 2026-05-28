@@ -1,6 +1,6 @@
 import Notification from "../models/Notification.js";
 import { normalizeNotification } from "../services/notificationService.js";
-import { registerStream, unregisterStream } from "../services/realtimeHub.js";
+import { emitStreamEvent, registerStream, unregisterStream } from "../services/realtimeHub.js";
 
 const getUserIdFromRequest = (req) => {
   const auth = typeof req.auth === "function" ? req.auth() : req.auth;
@@ -75,6 +75,58 @@ export const markAllNotificationsRead = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteNotification = async (req, res) => {
+  try {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const { id } = req.params;
+    const notification = await Notification.findOneAndDelete({ _id: id, recipientId: userId });
+
+    if (!notification) {
+      return res.status(404).json({ success: false, message: "Notification not found" });
+    }
+
+    emitStreamEvent("notifications", userId, {
+      type: "notification_deleted",
+      id,
+      unreadCount: await Notification.countDocuments({ recipientId: userId, read: false }),
+    });
+
+    return res.json({ success: true, id });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const clearNotifications = async (req, res) => {
+  try {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
+    const deleteResult = await Notification.deleteMany({ recipientId: userId });
+
+    emitStreamEvent("notifications", userId, {
+      type: "notifications_cleared",
+      deletedCount: deleteResult.deletedCount || 0,
+      unreadCount: 0,
+    });
+
+    return res.json({
+      success: true,
+      deletedCount: deleteResult.deletedCount || 0,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 

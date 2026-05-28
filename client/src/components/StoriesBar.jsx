@@ -39,7 +39,7 @@ const StoriesBar = () => {
 
 
     return (
-        <div className='w-screen sm:w-[calc(100vw-240px)] lg:max-w-2xl no-scrollbar overflow-x-auto px-2'>
+        <div className='w-full max-w-full sm:w-[calc(100vw-240px)] lg:max-w-2xl no-scrollbar overflow-x-auto px-2'>
 
             <div className='flex gap-3 pb-4'>
                 {/* Add Story Card */}

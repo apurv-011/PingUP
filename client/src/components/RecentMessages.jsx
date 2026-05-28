@@ -5,6 +5,7 @@ import moment from 'moment'
 import { useAuth, useUser } from '@clerk/react'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
+import { useSelector } from 'react-redux'
 
 const RecentMessages = () => {
 
@@ -13,17 +14,21 @@ const RecentMessages = () => {
 
     const { user } = useUser()
     const { getToken } = useAuth()
+    const { connections } = useSelector((state) => state.connections)
+    const messageEventKey = useSelector((state) => state.messages.lastEventAt)
 
     const fetchRecentMessages = useCallback(async () => {
         try {
             const token = await getToken()
-            const { data } = await api.get('/api/user/recent-messages', {
+            const { data } = await api.get('/api/message/recent', {
                 headers: { Authorization: `Bearer ${token}` }
             })
 
             if (data.success) {
+                const allowedConnectionIds = new Set(connections.map((connection) => connection._id))
                 const groupedMessages = data.messages.reduce((acc, message) => {
                     const senderId = message.from_user_id._id;
+                    if (!allowedConnectionIds.has(senderId)) return acc
                     if (!acc[senderId] || new Date(message.createdAt) > new Date(acc[senderId].createdAt)) {
                         acc[senderId] = message
                     }
@@ -39,7 +44,7 @@ const RecentMessages = () => {
         } catch (error) {
             toast.error(error.message)
         }
-    }, [getToken])
+    }, [connections, getToken])
 
     useEffect(() => {
         if (!user) return
@@ -50,7 +55,7 @@ const RecentMessages = () => {
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current)
         }
-    }, [fetchRecentMessages, user])
+    }, [fetchRecentMessages, messageEventKey, user])
 
 
     return (
@@ -67,7 +72,7 @@ const RecentMessages = () => {
                                     <p className='text-[10px] text-slate-400'>{moment(message.createdAt).fromNow()}</p>
                                 </div>
                                 <div className='flex justify-between'>
-                                    <p className='text-gray-500'>{message.text ? message.text : 'Media'}</p>
+                                    <p className='text-gray-500'>{message.preview || message.text || 'Media'}</p>
                                     {!message.seen && <p className='bg-indigo-500 text-white w-4 h-4 flex items-center justify-center rounded-full text-[10px]'>1</p>}
                                 </div>
                             </div>

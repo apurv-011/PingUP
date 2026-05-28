@@ -94,6 +94,28 @@ export const markAllNotificationsReadAsync = createAsyncThunk(
   },
 )
 
+export const deleteNotificationAsync = createAsyncThunk(
+  'notifications/deleteNotificationAsync',
+  async ({ token, id }) => {
+    const { data } = await api.delete(`/api/notifications/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    return data.success ? data : null
+  },
+)
+
+export const clearNotificationsAsync = createAsyncThunk(
+  'notifications/clearNotificationsAsync',
+  async (token) => {
+    const { data } = await api.delete('/api/notifications', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    return data.success ? data : null
+  },
+)
+
 const notificationsSlice = createSlice({
   name: 'notifications',
   initialState,
@@ -138,6 +160,18 @@ const notificationsSlice = createSlice({
       state.items.forEach((notification) => {
         notification.read = true
       })
+      state.unreadCount = 0
+    },
+    removeNotification: (state, action) => {
+      const id = action.payload
+      const nextItem = state.items.find((notification) => notification.id === id)
+      state.items = state.items.filter((notification) => notification.id !== id)
+      if (nextItem && !nextItem.read) {
+        state.unreadCount = Math.max(0, state.unreadCount - 1)
+      }
+    },
+    clearNotificationsLocally: (state) => {
+      state.items = []
       state.unreadCount = 0
     },
     toggleNotificationsOpen: (state) => {
@@ -189,6 +223,19 @@ const notificationsSlice = createSlice({
         })
         state.unreadCount = 0
       })
+      .addCase(deleteNotificationAsync.fulfilled, (state, action) => {
+        if (!action.payload) return
+        const deletedId = action.payload.id
+        const nextItem = state.items.find((notification) => notification.id === deletedId)
+        state.items = state.items.filter((notification) => notification.id !== deletedId)
+        if (nextItem && !nextItem.read) {
+          state.unreadCount = Math.max(0, state.unreadCount - 1)
+        }
+      })
+      .addCase(clearNotificationsAsync.fulfilled, (state) => {
+        state.items = []
+        state.unreadCount = 0
+      })
   },
 })
 
@@ -197,6 +244,8 @@ export const {
   pushNotification,
   markNotificationRead,
   markAllNotificationsRead,
+  removeNotification,
+  clearNotificationsLocally,
   toggleNotificationsOpen,
   closeNotifications,
   replaceNotifications,

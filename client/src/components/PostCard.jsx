@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { BadgeCheck, Heart, MessageCircle, Share2 } from 'lucide-react'
+import { BadgeCheck, Heart, MessageCircle, Share2, Trash2 } from 'lucide-react'
 import moment from 'moment'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
@@ -15,10 +15,13 @@ const escapeHtml = (value = '') =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
 
-const PostCard = ({ post }) => {
+const PostCard = ({ post, canDelete = false, onDelete = null, deleting = false }) => {
   const author = post?.user || {}
   const content = post?.content || ''
   const media = useMemo(() => {
+    if (Array.isArray(post?.image_assets) && post.image_assets.length > 0) {
+      return post.image_assets
+    }
     if (Array.isArray(post?.media_urls) && post.media_urls.length > 0) {
       return post.media_urls
     }
@@ -26,7 +29,7 @@ const PostCard = ({ post }) => {
       return post.image_urls
     }
     return []
-  }, [post?.image_urls, post?.media_urls])
+  }, [post?.image_assets, post?.image_urls, post?.media_urls])
 
   const postWithHashTags = escapeHtml(content).replace(/(#\w+)/g, '<span class = "text-indigo-600">$1</span>')
   const [likes, setLikes] = useState(Array.isArray(post?.likes_count) ? post.likes_count : [])
@@ -59,7 +62,22 @@ const PostCard = ({ post }) => {
   }
 
   return (
-    <div className='bg-white rounded-xl shadow p-4 space-y-4 w-full max-w-2xl'>
+    <div className='relative bg-white rounded-xl shadow p-4 space-y-4 w-full max-w-2xl'>
+      {canDelete && onDelete && (
+        <button
+          type='button'
+          onClick={onDelete}
+          disabled={deleting}
+          className='absolute top-3 right-3 h-9 w-9 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition disabled:opacity-60 touch-manipulation'
+          aria-label='Delete post'
+        >
+          {deleting ? (
+            <span className='h-4 w-4 rounded-full border-2 border-slate-300 border-t-transparent animate-spin' />
+          ) : (
+            <Trash2 className='h-4 w-4' />
+          )}
+        </button>
+      )}
       <div onClick={() => authorId && navigate('/profile/' + authorId)} className='inline-flex items-center gap-3 cursor-pointer'>
         <img src={author.profile_picture} alt='' className='w-6 h-6 rounded-full shadow' />
         <div>

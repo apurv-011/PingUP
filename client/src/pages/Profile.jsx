@@ -10,10 +10,12 @@ import { useAuth } from '@clerk/react'
 import api from '../api/axios.js'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 const PROFILE_PAGE_SIZE = 12
 
 const hasMedia = (post) => {
+  if (Array.isArray(post?.image_assets) && post.image_assets.length > 0) return true
   if (Array.isArray(post?.media_urls) && post.media_urls.length > 0) return true
   if (Array.isArray(post?.image_urls) && post.image_urls.length > 0) return true
   return false
@@ -31,7 +33,10 @@ const Profile = () => {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [pendingDeletePost, setPendingDeletePost] = useState(null)
+  const [deletingPostId, setDeletingPostId] = useState(null)
   const loadMoreRef = useRef(null)
+  const deleteRollbackRef = useRef(null)
 
   const profileUserId = profileId || currentUser?._id
 
@@ -86,6 +91,17 @@ const Profile = () => {
   }, [fetchUser, profileUserId])
 
   useEffect(() => {
+    const handlePostEvent = (event) => {
+      const payload = event?.detail
+      if (payload?.type !== 'post_deleted' || !payload.postId) return
+      setPosts((current) => current.filter((post) => post._id !== payload.postId))
+    }
+
+    window.addEventListener('pingup:post-event', handlePostEvent)
+    return () => window.removeEventListener('pingup:post-event', handlePostEvent)
+  }, [])
+
+  useEffect(() => {
     if (activeTab !== 'posts' || !hasMore || loadingMore || !profileUserId) return
 
     const observer = new IntersectionObserver(
@@ -105,6 +121,37 @@ const Profile = () => {
   }, [activeTab, fetchUser, hasMore, loadingMore, page, profileUserId])
 
   const mediaPosts = useMemo(() => posts.filter(hasMedia), [posts])
+
+  const handleDeletePost = async () => {
+    if (!pendingDeletePost) return
+
+    const postId = pendingDeletePost._id
+    const snapshot = deleteRollbackRef.current ? [...deleteRollbackRef.current] : [...posts]
+
+    try {
+      setDeletingPostId(postId)
+      setPosts((current) => current.filter((post) => post._id !== postId))
+      setPendingDeletePost(null)
+
+      const token = await getToken()
+      const { data } = await api.delete(`/api/post/${postId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!data.success) {
+        throw new Error(data.message)
+      }
+
+      toast.success(data.message)
+      deleteRollbackRef.current = null
+    } catch (error) {
+      setPosts(snapshot)
+      toast.error(error.message)
+    } finally {
+      setDeletingPostId(null)
+      deleteRollbackRef.current = null
+    }
+  }
 
   return user ? (
     <div className='relative h-full overflow-y-scroll bg-gray-50 p-4'>
@@ -134,7 +181,16 @@ const Profile = () => {
           {activeTab === 'posts' && (
             <div className='mt-3 flex flex-col items-center gap-4'>
               {posts.map((post) => (
-                <PostCard post={post} key={post._id} />
+                <PostCard
+                  post={post}
+                  key={post._id}
+                  canDelete={String(currentUser?._id || '') === String(user?._id || '')}
+                  deleting={deletingPostId === post._id}
+                  onDelete={() => {
+                    deleteRollbackRef.current = [...posts]
+                    setPendingDeletePost(post)
+                  }}
+                />
               ))}
               {hasMore && <div ref={loadMoreRef} className='h-10 w-full' />}
               {loadingMore && <p className='text-sm text-gray-500'>Loading more posts...</p>}
@@ -147,7 +203,12 @@ const Profile = () => {
                 <p className='text-sm text-gray-500'>No media posts yet.</p>
               ) : (
                 mediaPosts.map((post) =>
-                  (post.media_urls?.length ? post.media_urls : post.image_urls || []).map((image, index) => {
+                  (post.image_assets?.length
+                    ? post.image_assets
+                    : post.media_urls?.length
+                      ? post.media_urls
+                      : post.image_urls || []
+                  ).map((image, index) => {
                     const src = typeof image === 'string' ? image : image?.url
                     if (!src) return null
 
@@ -167,6 +228,15 @@ const Profile = () => {
         </div>
       </div>
       {showEdit && <ProfileModel setShowEdit={setShowEdit} />}
+      <ConfirmDialog
+        open={Boolean(pendingDeletePost)}
+        title='Delete post?'
+        description='Are you sure you want to delete this post? This action cannot be undone.'
+        confirmLabel='Delete'
+        onCancel={() => setPendingDeletePost(null)}
+        onConfirm={handleDeletePost}
+        loading={Boolean(deletingPostId)}
+      />
     </div>
   ) : (
     <Loading />

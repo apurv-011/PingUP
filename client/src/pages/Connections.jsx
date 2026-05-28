@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react'
-import { Users, UserPlus, UserCheck, UserRoundPen, MessageSquare } from 'lucide-react'
+import { Users, UserPlus, UserCheck, UserRoundPen, MessageSquare, UserMinus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { useAuth } from '@clerk/react'
-import { fetchConnections } from '../features/connections/connectionsSlice'
+import { fetchConnections, removeConnectionLocally } from '../features/connections/connectionsSlice'
 import api from '../api/axios'
 import toast from 'react-hot-toast'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 
 const Connections = () => {
 
   const [currentTab, setCurrentTab] = useState('Followers')
+  const [pendingRemovalId, setPendingRemovalId] = useState(null)
+  const [confirmRemoval, setConfirmRemoval] = useState({ open: false, user: null })
 
   const navigate = useNavigate()
   const { getToken } = useAuth();
@@ -54,6 +57,43 @@ const Connections = () => {
       }
     } catch (error) {
       toast.error(error.message)
+    }
+  }
+
+  const requestRemoveConnection = (user) => {
+    setConfirmRemoval({ open: true, user })
+  }
+
+  const confirmRemoveConnection = async () => {
+    if (!confirmRemoval.user) return
+
+    const targetUserId = confirmRemoval.user._id
+    setPendingRemovalId(targetUserId)
+
+    try {
+      const token = await getToken()
+      dispatch(removeConnectionLocally({ userId: targetUserId }))
+
+      const { data } = await api.post(
+        '/api/user/remove-connection',
+        { id: targetUserId },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      )
+
+      if (data.success) {
+        toast.success(data.message)
+      } else {
+        throw new Error(data.message)
+      }
+    } catch (error) {
+      toast.error(error.message)
+      const token = await getToken()
+      dispatch(fetchConnections(token))
+    } finally {
+      setPendingRemovalId(null)
+      setConfirmRemoval({ open: false, user: null })
     }
   }
 
@@ -130,9 +170,22 @@ const Connections = () => {
                   }
                   {
                     currentTab === 'Connections' && (
-                      <button onClick={() => navigate(`/messages/${user._id}`)} className='w-full p-2 text-sm rounded bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95 transition cursor-pointer flex items-center justify-center gap-1'>
-                        <MessageSquare className='w-4 h-4' />
-                        Message</button>
+                      <>
+                        <button onClick={() => navigate(`/messages/${user._id}`)} className='w-full p-2 text-sm rounded bg-slate-100 hover:bg-slate-200 text-slate-800 active:scale-95 transition cursor-pointer flex items-center justify-center gap-1'>
+                          <MessageSquare className='w-4 h-4' />
+                          Message</button>
+                        <button
+                          onClick={() => requestRemoveConnection(user)}
+                          className='w-full p-2 text-sm rounded bg-rose-50 hover:bg-rose-100 text-rose-700 active:scale-95 transition cursor-pointer flex items-center justify-center gap-1'
+                        >
+                          {pendingRemovalId === user._id ? (
+                            <span className='h-4 w-4 rounded-full border-2 border-rose-600 border-t-transparent animate-spin' />
+                          ) : (
+                            <UserMinus className='w-4 h-4' />
+                          )}
+                          Remove
+                        </button>
+                      </>
                     )
                   }
                 </div>
@@ -141,6 +194,15 @@ const Connections = () => {
           ))}
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmRemoval.open}
+        title='Remove this connection?'
+        description='This removes the relationship and makes the chat read-only. Old messages stay available unless chat deletion mode is enabled on the server.'
+        confirmLabel='Remove connection'
+        onCancel={() => setConfirmRemoval({ open: false, user: null })}
+        onConfirm={confirmRemoveConnection}
+        loading={Boolean(pendingRemovalId)}
+      />
     </div>
   )
 }
