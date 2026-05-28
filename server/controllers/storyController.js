@@ -4,10 +4,15 @@ import Story from '../models/Story.js';
 import User from '../models/User.js';
 import { inngest } from '../inngest/index.js';
 
+const getUserIdFromRequest = (req) => {
+    const auth = typeof req.auth === "function" ? req.auth() : req.auth;
+    return auth?.userId || null;
+};
+
 // Add user story
 export const addUserStory = async (req, res) => {
     try {
-        const { userId } = req.auth();
+        const userId = getUserIdFromRequest(req);
         const { content, media_type, background_color} = req.body;
         const media = req.file
 
@@ -49,8 +54,7 @@ export const addUserStory = async (req, res) => {
 // Get user stories
 export const getStories = async (req, res) => {
     try {
-        
-        const { userId } = req.auth()
+        const userId = getUserIdFromRequest(req)
 
         const user = await User.findById(userId)
 

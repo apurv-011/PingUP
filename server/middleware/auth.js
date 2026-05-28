@@ -1,11 +1,12 @@
 export const protect = async (req, res, next) => {
   try {
-    const { userId } = await req.auth();
+    const auth = typeof req.auth === "function" ? req.auth() : req.auth;
+    const { userId } = auth || {};
     if (!userId) {
-      return res.json({ success: false, message: "Not authenticated" });
+      return res.status(401).json({ success: false, message: "Not authenticated" });
     }
     next();
   } catch (error) {
-    res.json({ success: false, message: error.message });
+    res.status(401).json({ success: false, message: error.message });
   }
 };

@@ -10,7 +10,7 @@ import { addMessage } from './features/messages/messagesSlice.js'
 import { useSelector } from 'react-redux'
 import Notification from './components/Notification.jsx'
 import RouteFallback from './components/RouteFallback.jsx'
-import { pushNotification } from './features/notifications/notificationsSlice.js'
+import { fetchNotifications, pushNotification } from './features/notifications/notificationsSlice.js'
 
 const Login = lazy(() => import('./pages/Login'))
 const Layout = lazy(() => import('./pages/Layout'))
@@ -39,6 +39,7 @@ const App = () => {
         const token = await getToken()
         dispatch(fetchUser(token))
         dispatch(fetchConnections(token))
+        dispatch(fetchNotifications(token))
       }
     }
     fetchData()
@@ -50,7 +51,7 @@ const App = () => {
   }, [pathname])
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser?._id) {
       const eventSource = new EventSource(
         import.meta.env.VITE_BASEURL + '/api/message/' + currentUser._id
       )
@@ -82,7 +83,26 @@ const App = () => {
         eventSource.close()
       }
     }
-  }, [currentUser, dispatch])
+  }, [currentUser?._id, dispatch])
+
+  useEffect(() => {
+    if (!currentUser?._id) return
+
+    const notificationSource = new EventSource(
+      import.meta.env.VITE_BASEURL + '/api/notifications/stream/' + currentUser._id
+    )
+
+    notificationSource.onmessage = (event) => {
+      const payload = JSON.parse(event.data)
+      if (payload?.type !== 'notification' || !payload.notification) return
+
+      dispatch(pushNotification(payload.notification))
+    }
+
+    return () => {
+      notificationSource.close()
+    }
+  }, [currentUser?._id, dispatch])
 
 
 

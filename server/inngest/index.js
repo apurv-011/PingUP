@@ -185,12 +185,12 @@ const sendNotificationOfUnseenMessages = inngest.createFunction(
     triggers: { cron: "TZ=America/New_York 0 9 * * *" },
   },
   async ({ step }) => {
-    const messages = await Message.find({ seen: false }).populate("to_usre_id");
+    const messages = await Message.find({ seen: false }).populate("to_user_id");
     const unseenCount = {};
 
     messages.map((message) => {
-      unseenCount[message.to_user_id._id] =
-        (unseenCount[message.to_user_id._id] || 0) + 1;
+      const recipientId = message.to_user_id?._id || message.to_user_id;
+      unseenCount[recipientId] = (unseenCount[recipientId] || 0) + 1;
     });
     for (const userId in unseenCount) {
       const user = await User.findById(userId);

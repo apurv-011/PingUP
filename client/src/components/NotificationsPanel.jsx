@@ -2,10 +2,13 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { CheckCheck, X } from 'lucide-react'
+import { useAuth } from '@clerk/react'
 import {
   closeNotifications,
   markAllNotificationsRead,
+  markAllNotificationsReadAsync,
   markNotificationRead,
+  markNotificationReadAsync,
 } from '../features/notifications/notificationsSlice'
 
 const timeAgo = (iso) => {
@@ -28,6 +31,7 @@ const timeAgo = (iso) => {
 const NotificationsPanel = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const { getToken } = useAuth()
   const { isOpen, items, unreadCount } = useSelector((s) => s.notifications)
   const panelRef = useRef(null)
 
@@ -46,6 +50,22 @@ const NotificationsPanel = () => {
     if (!isOpen) return
     panelRef.current?.focus?.()
   }, [isOpen])
+
+  const persistReadAll = async () => {
+    dispatch(markAllNotificationsRead())
+    const token = await getToken()
+    if (token) {
+      dispatch(markAllNotificationsReadAsync(token))
+    }
+  }
+
+  const persistReadOne = async (notificationId) => {
+    dispatch(markNotificationRead(notificationId))
+    const token = await getToken()
+    if (token) {
+      dispatch(markNotificationReadAsync({ token, id: notificationId }))
+    }
+  }
 
   return (
     <>
@@ -78,14 +98,14 @@ const NotificationsPanel = () => {
           <div className='min-w-0'>
             <p className='font-semibold text-slate-900'>Notifications</p>
             <p className='text-xs text-slate-500'>
-              {unreadCount > 0 ? `${unreadCount} unread` : 'You’re all caught up'}
+              {unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up"}
             </p>
           </div>
           <div className='flex items-center gap-2'>
             <button
               type='button'
               className='h-9 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 active:scale-95 transition text-slate-800 text-sm flex items-center gap-2 touch-manipulation'
-              onClick={() => dispatch(markAllNotificationsRead())}
+              onClick={persistReadAll}
               disabled={items.length === 0 || unreadCount === 0}
             >
               <CheckCheck className='h-4 w-4' />
@@ -109,24 +129,24 @@ const NotificationsPanel = () => {
             </div>
           ) : (
             <ul className='p-2'>
-              {visibleItems.map((n) => (
-                <li key={n.id}>
+              {visibleItems.map((notification) => (
+                <li key={notification.id}>
                   <button
                     type='button'
                     className={[
                       'w-full text-left flex gap-3 px-3 py-3 rounded-xl transition',
                       'hover:bg-slate-50 active:scale-[0.99] touch-manipulation',
                     ].join(' ')}
-                    onClick={() => {
-                      dispatch(markNotificationRead(n.id))
-                      if (n.href) navigate(n.href)
+                    onClick={async () => {
+                      await persistReadOne(notification.id)
+                      if (notification.href) navigate(notification.href)
                       dispatch(closeNotifications())
                     }}
                   >
                     <div className='relative shrink-0'>
-                      {n.avatarUrl ? (
+                      {notification.avatarUrl ? (
                         <img
-                          src={n.avatarUrl}
+                          src={notification.avatarUrl}
                           alt=''
                           className='h-10 w-10 rounded-full object-cover ring-1 ring-black/5'
                           loading='lazy'
@@ -135,17 +155,17 @@ const NotificationsPanel = () => {
                       ) : (
                         <div className='h-10 w-10 rounded-full bg-indigo-100 ring-1 ring-black/5' />
                       )}
-                      {!n.read && (
+                      {!notification.read && (
                         <span className='absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-indigo-600 ring-2 ring-white' />
                       )}
                     </div>
                     <div className='min-w-0 flex-1'>
                       <div className='flex items-start justify-between gap-3'>
-                        <p className='text-sm font-medium text-slate-900 truncate'>{n.title}</p>
-                        <span className='text-[11px] text-slate-400 shrink-0'>{timeAgo(n.createdAt)}</span>
+                        <p className='text-sm font-medium text-slate-900 truncate'>{notification.title}</p>
+                        <span className='text-[11px] text-slate-400 shrink-0'>{timeAgo(notification.createdAt)}</span>
                       </div>
-                      {n.body && (
-                        <p className='text-sm text-slate-600 line-clamp-2'>{n.body}</p>
+                      {notification.body && (
+                        <p className='text-sm text-slate-600 line-clamp-2'>{notification.body}</p>
                       )}
                     </div>
                   </button>
@@ -160,4 +180,3 @@ const NotificationsPanel = () => {
 }
 
 export default NotificationsPanel
-

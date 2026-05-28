@@ -1,8 +1,14 @@
 import fs from "fs";
 import imagekit from "../config/imagekit.js";
 import Message from "../models/Message.js";
+import User from "../models/User.js";
+import { createNotification } from "../services/notificationService.js";
+import { emitStreamEvent, registerStream, unregisterStream } from "../services/realtimeHub.js";
 
-const connections = {};
+const getUserIdFromRequest = (req) => {
+  const auth = typeof req.auth === "function" ? req.auth() : req.auth;
+  return auth?.userId || null;
+};
 
 export const sseController = (req, res) => {
   const { userId } = req.params;
@@ -13,19 +19,19 @@ export const sseController = (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Access-Control-Allow-Origin", "*");
 
-  connections[userId] = res;
+  registerStream("messages", userId, res);
 
   res.write("log: Connected to SSE stream\n\n");
 
   req.on("close", () => {
-    delete connections[userId];
+    unregisterStream("messages", userId);
     console.log("Client disconnected");
   });
 };
 
 export const sendMessage = async (req, res) => {
   try {
-    const { userId } = req.auth();
+    const userId = getUserIdFromRequest(req);
     const { to_user_id, text } = req.body;
 
     const image = req.file;
@@ -60,14 +66,29 @@ export const sendMessage = async (req, res) => {
 
     res.json({ success: true, message });
 
-    const messageWithUserData = await Message.findById(message._id).populate(
-      "from_user_id",
-    );
+    const [messageWithUserData, actor] = await Promise.all([
+      Message.findById(message._id).populate("from_user_id to_user_id"),
+      User.findById(userId).select("full_name username profile_picture"),
+    ]);
 
-    if (connections[to_user_id]) {
-      connections[to_user_id].write(
-        `data: ${JSON.stringify(messageWithUserData)}\n\n`,
-      );
+    if (String(userId) !== String(to_user_id)) {
+      await createNotification({
+        recipientId: to_user_id,
+        actorId: userId,
+        type: "message",
+        entityType: "message",
+        entityId: message._id.toString(),
+        title: actor?.full_name || actor?.username || "New message",
+        body: text ? text.slice(0, 80) : "Sent you a message",
+        href: `/messages/${userId}`,
+        avatarUrl: actor?.profile_picture || null,
+        meta: { messageId: message._id.toString() },
+        dedupeKey: `message:${message._id.toString()}`,
+      });
+    }
+
+    if (messageWithUserData) {
+      emitStreamEvent("messages", to_user_id, messageWithUserData);
     }
   } catch (error) {
     console.log(error);
@@ -77,7 +98,7 @@ export const sendMessage = async (req, res) => {
 
 export const getChatMessages = async (req, res) => {
   try {
-    const { userId } = req.auth();
+    const userId = getUserIdFromRequest(req);
     const { to_user_id } = req.body;
 
     const messages = await Message.find({
@@ -100,11 +121,11 @@ export const getChatMessages = async (req, res) => {
 
 export const getUserRecentMessages = async (req, res) => {
   try {
-    const { userId } = req.auth();
+    const userId = getUserIdFromRequest(req);
 
     const messages = await Message.find({ to_user_id: userId })
       .populate("from_user_id to_user_id")
-      .sort({ created_at: -1 });
+      .sort({ createdAt: -1 });
 
     res.json({ success: true, messages });
   } catch (error) {

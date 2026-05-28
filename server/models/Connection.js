@@ -9,6 +9,9 @@ const connectionSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+connectionSchema.index({ from_user_id: 1, to_user_id: 1 }, { unique: true });
+connectionSchema.index({ to_user_id: 1, status: 1, createdAt: -1 });
+
 const Connection = mongoose.model("Connection", connectionSchema);
 
 export default Connection;
