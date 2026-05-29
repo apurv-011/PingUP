@@ -1,5 +1,5 @@
 import Notification from "../models/Notification.js";
-import { emitStreamEvent } from "./realtimeHub.js";
+import { emitNotificationEvent } from "./realtimeHub.js";
 
 export const normalizeNotification = (notification) => {
   if (!notification) return null;
@@ -61,7 +61,7 @@ export const createNotification = async (input) => {
     });
 
     const normalized = normalizeNotification(notification);
-    emitStreamEvent("notifications", recipientId, {
+    emitNotificationEvent(recipientId, {
       type: "notification",
       notification: normalized,
     });

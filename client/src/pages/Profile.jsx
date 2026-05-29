@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import Loading from '../components/Loading'

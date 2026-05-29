@@ -4,9 +4,10 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '@clerk/react'
 import api from '../api/axios'
-import { addMessage, fetchMessages, removeMessage, resetMessages } from '../features/messages/messagesSlice'
+import { addMessage, fetchMessages, removeMessage, resetMessages, updateMessage } from '../features/messages/messagesSlice'
 import toast from 'react-hot-toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { getRealtimeSocket, joinConversationRoom, leaveConversationRoom } from '../services/realtimeSocket'
 
 const LONG_PRESS_DELAY = 500
 
@@ -31,12 +32,18 @@ const ChatBox = () => {
   const messagesEndRef = useRef(null)
   const scrollRafRef = useRef(null)
   const longPressTimerRef = useRef(null)
+  const pendingMessageIdRef = useRef(null)
   const mediaPreviewUrl = useMemo(() => (media ? URL.createObjectURL(media) : null), [media])
 
   const activeConnection = useMemo(
     () => connections.find((connection) => connection._id === userId) || null,
     [connections, userId],
   )
+
+  const conversationKey = useMemo(() => {
+    if (!currentUser?._id || !userId) return null
+    return [currentUser._id, userId].sort().join(':')
+  }, [currentUser?._id, userId])
 
   const canSendMessages = Boolean(activeConnection)
 
@@ -98,6 +105,18 @@ const ChatBox = () => {
   }, [activeConnection, chatPartner, fetchPartnerProfile])
 
   useEffect(() => {
+    if (conversationKey) {
+      joinConversationRoom(conversationKey)
+    }
+
+    return () => {
+      if (conversationKey) {
+        leaveConversationRoom(conversationKey)
+      }
+    }
+  }, [conversationKey])
+
+  useEffect(() => {
     if (!mediaPreviewUrl) return undefined
     return () => URL.revokeObjectURL(mediaPreviewUrl)
   }, [mediaPreviewUrl])
@@ -146,10 +165,70 @@ const ChatBox = () => {
       }
 
       setIsSending(true)
+      const clientMessageId = crypto.randomUUID()
+      pendingMessageIdRef.current = clientMessageId
+      const messageText = text.trim()
+      const optimisticMessage = {
+        _id: clientMessageId,
+        client_message_id: clientMessageId,
+        clientMessageId,
+        from_user_id: currentUser,
+        to_user_id: activeConnection || chatPartner || { _id: userId },
+        conversation_key: conversationKey,
+        text: messageText,
+        message_type: media?.type?.startsWith('image/')
+          ? 'image'
+          : media?.type?.startsWith('video/')
+            ? 'video'
+            : media?.type?.startsWith('audio/')
+              ? 'audio'
+              : media
+                ? 'document'
+                : 'text',
+        createdAt: new Date().toISOString(),
+        seen: false,
+        pending: true,
+      }
+
+      dispatch(addMessage(optimisticMessage))
+
+      const socket = getRealtimeSocket()
+      if (socket?.connected && !media) {
+        try {
+          await new Promise((resolve, reject) => {
+            socket.emit(
+              'send-message',
+              {
+                to_user_id: userId,
+                text: messageText,
+                client_message_id: clientMessageId,
+              },
+              (ack) => {
+                if (!ack?.success) {
+                  reject(new Error(ack?.message || 'Failed to send message'))
+                  return
+                }
+
+                dispatch(updateMessage(ack.message))
+                resolve(ack)
+              },
+            )
+          })
+
+          setText('')
+          setMedia(null)
+          pendingMessageIdRef.current = null
+          return
+        } catch (socketError) {
+          console.warn('Socket send failed, falling back to HTTP:', socketError.message)
+        }
+      }
+
       const token = await getToken()
       const formData = new FormData()
       formData.append('to_user_id', userId)
-      formData.append('text', text)
+      formData.append('text', messageText)
+      formData.append('client_message_id', clientMessageId)
       if (media) {
         formData.append('media', media)
       }
@@ -164,8 +243,13 @@ const ChatBox = () => {
 
       setText('')
       setMedia(null)
-      dispatch(addMessage(data.message))
+      dispatch(updateMessage(data.message))
+      pendingMessageIdRef.current = null
     } catch (error) {
+      if (pendingMessageIdRef.current) {
+        dispatch(removeMessage(pendingMessageIdRef.current))
+        pendingMessageIdRef.current = null
+      }
       toast.error(error.message)
     } finally {
       setIsSending(false)

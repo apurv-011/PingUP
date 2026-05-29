@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import { createServer } from "http";
 import "dotenv/config";
 import connectDB from "./config/db.js";
 import { serve } from "inngest/express";
@@ -10,6 +11,8 @@ import postRouter from "./routes/postRoutes.js";
 import storyRouter from "./routes/storyRoutes.js";
 import messageRouter from "./routes/messageRoutes.js";
 import notificationRouter from "./routes/notificationRoutes.js";
+import { Server } from "socket.io";
+import { attachRealtimeSocketServer } from "./services/realtimeHub.js";
 
 const app = express();
 await connectDB()
@@ -34,9 +37,25 @@ app.use('/api/message', messageRouter)
 app.use('/api/notifications', notificationRouter)
 
 const PORT = process.env.PORT || 4000;
+const httpServer = createServer(app);
+
+const io =
+  process.env.VERCEL !== "1"
+    ? new Server(httpServer, {
+        cors: {
+          origin: process.env.FRONTEND_URL?.split(",").map((origin) => origin.trim()).filter(Boolean) || true,
+          credentials: true,
+        },
+        transports: ["websocket", "polling"],
+      })
+    : null;
+
+if (io) {
+  attachRealtimeSocketServer(io);
+}
 
 if (process.env.VERCEL !== "1") {
-  app.listen(PORT, () => {
+  httpServer.listen(PORT, () => {
     console.log(`Server is running on PORT ${PORT}`);
   });
 }

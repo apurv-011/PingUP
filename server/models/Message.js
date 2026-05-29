@@ -34,6 +34,7 @@ const messageSchema = new mongoose.Schema(
     attachments: { type: [mediaSchema], default: [] },
     reply_to_message_id: { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
     forwarded_from_message_id: { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
+    client_message_id: { type: String, default: null, index: true },
     hidden_for_user_ids: [{ type: String, ref: "User", index: true }],
     deleted_for_everyone: { type: Boolean, default: false, index: true },
     deleted_by_user_id: { type: String, ref: "User", default: null },
@@ -47,6 +48,7 @@ const messageSchema = new mongoose.Schema(
 messageSchema.index({ conversation_key: 1, createdAt: -1 });
 messageSchema.index({ to_user_id: 1, seen: 1, createdAt: -1 });
 messageSchema.index({ from_user_id: 1, deleted_for_everyone: 1, createdAt: -1 });
+messageSchema.index({ from_user_id: 1, client_message_id: 1 }, { unique: true, sparse: true });
 
 const Message = mongoose.model("Message", messageSchema);
 

@@ -2,15 +2,14 @@ import Message from "../models/Message.js";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import { createNotification } from "../services/notificationService.js";
-import { emitStreamEvent, registerStream, unregisterStream } from "../services/realtimeHub.js";
+import { emitMessageEvent, emitNotificationEvent, registerStream, unregisterStream } from "../services/realtimeHub.js";
+import { buildConversationKey, buildMessagePreview, deleteStoredMedia } from "../services/mediaCleanup.js";
 import {
-  buildConversationKey,
-  buildMessagePreview,
-  deleteStoredMedia,
-  normalizeMediaPayload,
-  sanitizeMessageForViewer,
-  uploadMediaFile,
-} from "../services/mediaCleanup.js";
+  getMessageActor,
+  loadMessageWithUsers,
+  persistChatMessage,
+  serializeMessage,
+} from "../services/messageService.js";
 
 const getUserIdFromRequest = (req) => {
   const auth = typeof req.auth === "function" ? req.auth() : req.auth;
@@ -23,22 +22,6 @@ const getUploadedFile = (req) =>
   req.files?.image?.[0] ||
   req.files?.attachment?.[0] ||
   (Array.isArray(req.files) ? req.files[0] : null);
-
-const serializeMessage = (message, viewerId = null) => {
-  const sanitized = sanitizeMessageForViewer(message, viewerId);
-  if (!sanitized) return null;
-
-  return {
-    ...sanitized,
-    media: normalizeMediaPayload(sanitized.media),
-    attachments: normalizeMediaPayload(sanitized.attachments || []),
-  };
-};
-
-const loadMessageWithUsers = async (messageId) =>
-  Message.findById(messageId)
-    .populate("from_user_id to_user_id reply_to_message_id forwarded_from_message_id")
-    .lean();
 
 export const sseController = (req, res) => {
   const { userId } = req.params;
@@ -60,74 +43,72 @@ export const sseController = (req, res) => {
 export const sendMessage = async (req, res) => {
   try {
     const userId = getUserIdFromRequest(req);
-    const { to_user_id, text = "" } = req.body;
+    const { to_user_id, text = "", client_message_id = null } = req.body;
     const file = getUploadedFile(req);
 
     if (!userId || !to_user_id) {
       return res.status(400).json({ success: false, message: "Missing message recipient" });
     }
 
-    const conversationKey = buildConversationKey(userId, to_user_id);
-    const media = file ? await uploadMediaFile(file) : null;
-    const messageType = media?.kind || "text";
-
-    const connection = await User.exists({
-      _id: userId,
-      connections: to_user_id,
+    const { payload, message, preview, clientMessageId } = await persistChatMessage({
+      senderId: userId,
+      recipientId: to_user_id,
+      text,
+      file,
+      clientMessageId: client_message_id,
     });
-
-    if (!connection) {
-      return res.status(403).json({
-        success: false,
-        message: "You can only message connected users",
-      });
-    }
-
-    const message = await Message.create({
-      from_user_id: userId,
-      to_user_id,
-      conversation_key: conversationKey,
-      text: text.trim(),
-      message_type: messageType,
-      media,
-      attachments: media ? [media] : [],
-    });
-
-    const hydratedMessage = await loadMessageWithUsers(message._id);
-    const payload = serializeMessage(hydratedMessage);
 
     if (payload) {
-      emitStreamEvent("messages", to_user_id, {
+      emitMessageEvent(to_user_id, {
         type: "message",
         action: "created",
-        message: payload,
+        message: {
+          ...payload,
+          client_message_id: clientMessageId,
+          clientMessageId,
+        },
       });
-      emitStreamEvent("messages", userId, {
+      emitMessageEvent(userId, {
         type: "message",
         action: "created",
-        message: payload,
+        message: {
+          ...payload,
+          client_message_id: clientMessageId,
+          clientMessageId,
+        },
       });
     }
 
-    const actor = await User.findById(userId).select("full_name username profile_picture").lean();
+    const actor = await getMessageActor(userId);
 
     if (String(userId) !== String(to_user_id)) {
-      await createNotification({
-        recipientId: to_user_id,
-        actorId: userId,
-        type: "message",
-        entityType: "message",
-        entityId: message._id.toString(),
-        title: actor?.full_name || actor?.username || "New message",
-        body: buildMessagePreview(hydratedMessage, to_user_id) || "Sent you a message",
-        href: `/messages/${userId}`,
-        avatarUrl: actor?.profile_picture || null,
-        meta: { messageId: message._id.toString() },
-        dedupeKey: `message:${message._id.toString()}`,
+      queueMicrotask(() => {
+        createNotification({
+          recipientId: to_user_id,
+          actorId: userId,
+          type: "message",
+          entityType: "message",
+          entityId: message._id.toString(),
+          title: actor?.full_name || actor?.username || "New message",
+          body: preview || buildMessagePreview(message, to_user_id) || "Sent you a message",
+          href: `/messages/${userId}`,
+          avatarUrl: actor?.profile_picture || null,
+          meta: { messageId: message._id.toString() },
+          dedupeKey: `message:${message._id.toString()}`,
+        }).catch((error) => {
+          console.error("Failed to create message notification:", error);
+        });
       });
     }
 
-    return res.json({ success: true, message: payload });
+    return res.json({
+      success: true,
+      message: {
+        ...payload,
+        client_message_id: clientMessageId,
+        clientMessageId,
+      },
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ success: false, message: error.message });
@@ -159,7 +140,11 @@ export const getChatMessages = async (req, res) => {
       ],
     })
       .sort({ createdAt: -1 })
-      .populate("from_user_id to_user_id reply_to_message_id forwarded_from_message_id");
+      .limit(200)
+      .populate({ path: "from_user_id", select: "full_name username profile_picture" })
+      .populate({ path: "to_user_id", select: "full_name username profile_picture" })
+      .populate({ path: "reply_to_message_id", select: "text message_type media from_user_id to_user_id createdAt" })
+      .populate({ path: "forwarded_from_message_id", select: "text message_type media from_user_id to_user_id createdAt" });
 
     await Message.updateMany(
       { from_user_id: to_user_id, to_user_id: userId },
@@ -179,28 +164,35 @@ export const getChatMessages = async (req, res) => {
 export const getUserRecentMessages = async (req, res) => {
   try {
     const userId = getUserIdFromRequest(req);
-    const user = await User.findById(userId).select("connections").lean();
+    const user = await User.findById(userId).select("_id").lean();
 
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
     const recentMessages = await Message.find({
-      to_user_id: userId,
-      from_user_id: { $in: user.connections || [] },
-      hidden_for_user_ids: { $ne: userId },
+      $and: [
+        {
+          $or: [{ from_user_id: userId }, { to_user_id: userId }],
+        },
+        {
+          hidden_for_user_ids: { $ne: userId },
+        },
+      ],
     })
-      .populate("from_user_id to_user_id")
+      .populate({ path: "from_user_id", select: "full_name username profile_picture" })
+      .populate({ path: "to_user_id", select: "full_name username profile_picture" })
       .sort({ createdAt: -1 })
+      .limit(100)
       .lean();
 
     const groupedMessages = recentMessages.reduce((accumulator, message) => {
-      const senderId = message.from_user_id?._id?.toString?.() || message.from_user_id?.toString?.();
-      if (!senderId) return accumulator;
+      const key = message.conversation_key;
+      if (!key) return accumulator;
 
-      const existing = accumulator[senderId];
+      const existing = accumulator[key];
       if (!existing || new Date(message.createdAt) > new Date(existing.createdAt)) {
-        accumulator[senderId] = {
+        accumulator[key] = {
           ...message,
           preview: buildMessagePreview(message, userId),
         };
@@ -262,7 +254,7 @@ export const deleteMessage = async (req, res) => {
       });
 
       relatedNotifications.forEach((notification) => {
-        emitStreamEvent("notifications", notification.recipientId, {
+        emitNotificationEvent(notification.recipientId, {
           type: "notification_deleted",
           id: notification._id.toString(),
         });
@@ -287,8 +279,8 @@ export const deleteMessage = async (req, res) => {
       conversationKey: message.conversation_key,
     };
 
-    emitStreamEvent("messages", message.from_user_id, payload);
-    emitStreamEvent("messages", message.to_user_id, payload);
+    emitMessageEvent(message.from_user_id, payload);
+    emitMessageEvent(message.to_user_id, payload);
 
     return res.json({
       success: true,
@@ -335,12 +327,12 @@ export const deleteMessageMedia = async (req, res) => {
     const hydrated = await loadMessageWithUsers(messageId);
     const payload = serializeMessage(hydrated);
 
-    emitStreamEvent("messages", message.from_user_id, {
+    emitMessageEvent(message.from_user_id, {
       type: "message",
       action: "media_deleted",
       message: payload,
     });
-    emitStreamEvent("messages", message.to_user_id, {
+    emitMessageEvent(message.to_user_id, {
       type: "message",
       action: "media_deleted",
       message: payload,
